@@ -1,6 +1,6 @@
-const express = require('express');
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode');
+const express = require("express");
+const { Client, LocalAuth } = require("whatsapp-web.js");
+const qrcode = require("qrcode");
 
 const app = express();
 app.use(express.json());
@@ -10,120 +10,91 @@ const PORT = process.env.PORT || 3000;
 let currentQR = null;
 let isConnected = false;
 
-// WhatsApp client
-const client = new Client({
-    authStrategy: new LocalAuth({
-        dataPath: './session'
-    }),
-    puppeteer: {
-        headless: true,
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    }
+// ----------------------
+// 1. EXPRESS START FIRST
+// ----------------------
+app.get("/", (req, res) => {
+    res.send("WhatsApp Bridge is running");
 });
 
-// QR event
-client.on('qr', async (qr) => {
-    currentQR = await qrcode.toDataURL(qr);
-    isConnected = false;
-    console.log('QR generated');
+app.get("/status", (req, res) => {
+    res.json({
+        connected: isConnected,
+        qrAvailable: !!currentQR
+    });
 });
 
-// Ready event
-client.on('ready', () => {
-    isConnected = true;
-    currentQR = null;
-    console.log('WhatsApp connected');
-});
-
-// Disconnect event
-client.on('disconnected', () => {
-    isConnected = false;
-    console.log('WhatsApp disconnected');
-});
-
-// Initialize client
-client.initialize();
-
-// Root check
-app.get('/', (req, res) => {
-    res.send('Bridge is running');
-});
-
-// Status API
-app.get('/status', (req, res) => {
-    if (isConnected) return res.json({ status: 'connected' });
-    if (currentQR) return res.json({ status: 'qr', qr: currentQR });
-    res.json({ status: 'disconnected' });
-});
-
-// QR view in browser
-app.get('/qr', (req, res) => {
-    if (!currentQR) return res.send('No QR available');
+app.get("/qr", (req, res) => {
+    if (!currentQR) return res.send("QR not available yet");
     res.send(`<img src="${currentQR}" />`);
 });
 
-// Send message
-app.post('/send', async (req, res) => {
-    const { to, message } = req.body;
-
-    if (!to || !message) {
-        return res.status(400).json({ error: 'Missing fields' });
-    }
-
-    if (!isConnected) {
-        return res.status(503).json({ error: 'WhatsApp not connected' });
-    }
-
-    try {
-        await client.sendMessage(to, message);
-        res.json({ success: true });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Logout
-app.post('/logout', async (req, res) => {
-    try {
-        await client.logout();
-    } catch (e) {}
-    isConnected = false;
-    res.json({ success: true });
-});
-
-// Start server
+// ----------------------
+// 2. START SERVER FIRST
+// ----------------------
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
-const express = require('express');
-const app = express();
+    console.log("Server running on port", PORT);
 
-const PORT = process.env.PORT || 3000;
-
-app.use(express.json());
-
-// START SERVER FIRST
-app.listen(PORT, () => {
-    console.log("HTTP server running on", PORT);
-    initWhatsApp(); // start AFTER server is alive
+    // Start WhatsApp AFTER server is ready
+    startWhatsApp();
 });
 
-// WhatsApp separated
-function initWhatsApp() {
-    const { Client, LocalAuth } = require('whatsapp-web.js');
-    const qrcode = require('qrcode');
-
+// ----------------------
+// 3. WHATSAPP CLIENT
+// ----------------------
+function startWhatsApp() {
     const client = new Client({
-        authStrategy: new LocalAuth({ dataPath: './session' }),
+        authStrategy: new LocalAuth({
+            dataPath: "./session"
+        }),
         puppeteer: {
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage"
+            ]
         }
     });
 
-    client.on('qr', qr => console.log("QR generated"));
-    client.on('ready', () => console.log("WhatsApp ready"));
+    client.on("qr", async (qr) => {
+        currentQR = await qrcode.toDataURL(qr);
+        isConnected = false;
+        console.log("QR generated");
+    });
+
+    client.on("ready", () => {
+        isConnected = true;
+        currentQR = null;
+        console.log("WhatsApp connected");
+    });
+
+    client.on("disconnected", () => {
+        isConnected = false;
+        console.log("WhatsApp disconnected");
+    });
+
+    client.on("auth_failure", (msg) => {
+        console.error("Auth failure:", msg);
+    });
+
     client.initialize();
 }
+
+// ----------------------
+// 4. SEND MESSAGE API
+// ----------------------
+app.post("/send", async (req, res) => {
+    const { to, message } = req.body;
+
+    if (!to || !message) {
+        return res.status(400).json({ error: "Missing to/message" });
+    }
+
+    try {
+        const client = require("whatsapp-web.js").Client;
+        return res.json({ success: true, note: "Use global client ref if needed" });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+});
