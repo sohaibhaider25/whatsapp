@@ -97,3 +97,33 @@ app.post('/logout', async (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+const express = require('express');
+const app = express();
+
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json());
+
+// START SERVER FIRST
+app.listen(PORT, () => {
+    console.log("HTTP server running on", PORT);
+    initWhatsApp(); // start AFTER server is alive
+});
+
+// WhatsApp separated
+function initWhatsApp() {
+    const { Client, LocalAuth } = require('whatsapp-web.js');
+    const qrcode = require('qrcode');
+
+    const client = new Client({
+        authStrategy: new LocalAuth({ dataPath: './session' }),
+        puppeteer: {
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        }
+    });
+
+    client.on('qr', qr => console.log("QR generated"));
+    client.on('ready', () => console.log("WhatsApp ready"));
+    client.initialize();
+}
